@@ -23,32 +23,18 @@ namespace QLCSV.Controllers
             [FromQuery] string? search)
         {
             var query = _context.Users
-                .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p.Faculty)
-                .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p.Major)
+                .Include(u => u.AlumniProfile).ThenInclude(p => p.Faculty)
+                .Include(u => u.AlumniProfile).ThenInclude(p => p.Major)
                 .AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(role))
-            {
-                query = query.Where(u => u.Role == role);
-            }
-
-            if (isActive.HasValue)
-            {
-                query = query.Where(u => u.IsActive == isActive.Value);
-            }
-
+            if (!string.IsNullOrWhiteSpace(role)) query = query.Where(u => u.Role == role);
+            if (isActive.HasValue) query = query.Where(u => u.IsActive == isActive.Value);
             if (!string.IsNullOrWhiteSpace(search))
             {
-                query = query.Where(u =>
-                    EF.Functions.ILike(u.FullName, $"%{search}%") ||
-                    EF.Functions.ILike(u.Email, $"%{search}%"));
+                query = query.Where(u => EF.Functions.ILike(u.FullName, $"%{search}%") || EF.Functions.ILike(u.Email, $"%{search}%"));
             }
 
-            var users = await query
-                .OrderByDescending(u => u.CreatedAt)
-                .ToListAsync();
+            var users = await query.OrderByDescending(u => u.CreatedAt).ToListAsync();
 
             var userResponses = users.Select(u => new UserResponse
             {
@@ -60,14 +46,11 @@ namespace QLCSV.Controllers
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt,
-
                 HasProfile = u.AlumniProfile != null,
                 StudentId = u.AlumniProfile?.StudentId,
                 GraduationYear = u.AlumniProfile?.GraduationYear,
-
                 FacultyId = u.AlumniProfile?.FacultyId,
                 FacultyName = u.AlumniProfile?.Faculty?.Name,
-
                 MajorId = u.AlumniProfile?.MajorId,
                 MajorName = u.AlumniProfile?.Major?.Name
             }).ToList();
@@ -79,14 +62,11 @@ namespace QLCSV.Controllers
         public async Task<ActionResult<UserResponse>> GetUserById(long id)
         {
             var user = await _context.Users
-                .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p.Faculty)
-                .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p.Major)
+                .Include(u => u.AlumniProfile).ThenInclude(p => p.Faculty)
+                .Include(u => u.AlumniProfile).ThenInclude(p => p.Major)
                 .FirstOrDefaultAsync(u => u.Id == id);
 
-            if (user == null)
-                return NotFound(new { Message = "User không tồn tại" });
+            if (user == null) return NotFound(new { Message = "User không tồn tại" });
 
             var response = new UserResponse
             {
@@ -98,54 +78,42 @@ namespace QLCSV.Controllers
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
                 UpdatedAt = user.UpdatedAt,
-
                 HasProfile = user.AlumniProfile != null,
                 StudentId = user.AlumniProfile?.StudentId,
                 GraduationYear = user.AlumniProfile?.GraduationYear,
-
                 FacultyId = user.AlumniProfile?.FacultyId,
-                FacultyName = user.AlumniProfile?.Faculty?.Name ?? null,
-
+                FacultyName = user.AlumniProfile?.Faculty?.Name,
                 MajorId = user.AlumniProfile?.MajorId,
-                MajorName = user.AlumniProfile?.Major?.Name ?? null
+                MajorName = user.AlumniProfile?.Major?.Name
             };
 
             return Ok(response);
         }
 
         [HttpPut("{id:long}/role")]
-        public async Task<IActionResult> UpdateUserRole(
-            long id,
-            [FromBody] UserUpdateRoleRequest request)
+        public async Task<IActionResult> UpdateUserRole(long id, [FromBody] UserUpdateRoleRequest request)
         {
             var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound(new { Message = "User không tồn tại" });
+            if (user == null) return NotFound(new { Message = "User không tồn tại" });
 
             user.Role = request.Role;
             user.UpdatedAt = DateTimeOffset.UtcNow;
-
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Cập nhật vai trò thành công", user.Id, user.Role });
         }
 
         [HttpPut("{id:long}/status")]
-        public async Task<IActionResult> UpdateUserStatus(
-            long id,
-            [FromBody] UserUpdateStatusRequest request)
+        public async Task<IActionResult> UpdateUserStatus(long id, [FromBody] UserUpdateStatusRequest request)
         {
             var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound(new { Message = "User không tồn tại" });
+            if (user == null) return NotFound(new { Message = "User không tồn tại" });
 
             user.IsActive = request.IsActive;
             user.UpdatedAt = DateTimeOffset.UtcNow;
-
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Cập nhật trạng thái thành công", user.Id, user.IsActive });
         }
-
     }
 }

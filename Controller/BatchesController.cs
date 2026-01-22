@@ -5,11 +5,11 @@ using QLCSV.Data;
 using QLCSV.DTOs.Batch;
 using QLCSV.Models;
 
-namespace QLCSV.Controllers
+namespace QLCSV.Controllers // Đã sửa namespace
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class BatchesController : ControllerBase
+    public class BatchesController : BaseController // Kế thừa BaseController cho chuẩn
     {
         private readonly AppDbContext _context;
 

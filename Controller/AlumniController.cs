@@ -35,17 +35,10 @@ namespace QLCSV.Controllers
                 .Where(a => a.IsPublic)
                 .AsQueryable();
 
-            if (facultyId.HasValue)
-                query = query.Where(a => a.FacultyId == facultyId.Value);
-
-            if (majorId.HasValue)
-                query = query.Where(a => a.MajorId == majorId.Value);
-
-            if (graduationYear.HasValue)
-                query = query.Where(a => a.GraduationYear == graduationYear.Value);
-
-            if (!string.IsNullOrWhiteSpace(city))
-                query = query.Where(a => a.City != null && EF.Functions.ILike(a.City, $"%{city}%"));
+            if (facultyId.HasValue) query = query.Where(a => a.FacultyId == facultyId);
+            if (majorId.HasValue) query = query.Where(a => a.MajorId == majorId);
+            if (graduationYear.HasValue) query = query.Where(a => a.GraduationYear == graduationYear);
+            if (!string.IsNullOrWhiteSpace(city)) query = query.Where(a => a.City != null && EF.Functions.ILike(a.City, $"%{city}%"));
 
             var totalCount = await query.CountAsync();
             pageSize = Math.Min(pageSize, 100);
@@ -94,12 +87,15 @@ namespace QLCSV.Controllers
             if (profile == null)
                 return NotFound(new { Message = "Hồ sơ không tồn tại" });
 
-            var currentUserId = GetCurrentUserId();
+            var currentUserId = GetCurrentUserIdOptional();
             var isAdmin = User.IsInRole("admin");
 
-            if (!profile.IsPublic && currentUserId != profile.UserId && !isAdmin)
+            if (!profile.IsPublic)
             {
-                return Forbid();
+                if (currentUserId == null || (currentUserId != profile.UserId && !isAdmin))
+                {
+                    return Forbid();
+                }
             }
 
             var response = MapToDetailResponse(profile);
@@ -116,7 +112,7 @@ namespace QLCSV.Controllers
                 .Include(a => a.User)
                 .Include(a => a.Faculty)
                 .Include(a => a.Major)
-                .FirstOrDefaultAsync(a => a.UserId == userId.Value);
+                .FirstOrDefaultAsync(a => a.UserId == userId);
 
             if (profile == null)
                 return NotFound(new { Message = "Bạn chưa hoàn thiện hồ sơ" });
@@ -130,47 +126,30 @@ namespace QLCSV.Controllers
         public async Task<ActionResult<AlumniDetailResponse>> UpdateMyProfile(
             [FromBody] AlumniUpdateRequest request)
         {
-
             var userId = GetCurrentUserId();
 
             var profile = await _context.AlumniProfiles
                 .Include(a => a.User)
                 .Include(a => a.Faculty)
                 .Include(a => a.Major)
-                .FirstOrDefaultAsync(a => a.UserId == userId.Value);
+                .FirstOrDefaultAsync(a => a.UserId == userId);
 
-            if (profile == null)
-                return NotFound(new { Message = "Bạn chưa hoàn thiện hồ sơ" });
+            if (profile == null) return NotFound(new { Message = "Bạn chưa hoàn thiện hồ sơ" });
 
-            if (request.CurrentPosition != null)
-                profile.CurrentPosition = request.CurrentPosition;
+            if (request.CurrentPosition != null) profile.CurrentPosition = request.CurrentPosition;
+            if (request.Company != null) profile.Company = request.Company;
+            if (request.CompanyIndustry != null) profile.CompanyIndustry = request.CompanyIndustry;
+            if (request.City != null) profile.City = request.City;
+            if (request.Country != null) profile.Country = request.Country;
+            if (request.LinkedinUrl != null) profile.LinkedinUrl = request.LinkedinUrl;
+            if (request.FacebookUrl != null) profile.FacebookUrl = request.FacebookUrl;
+            if (request.Bio != null) profile.Bio = request.Bio;
 
-            if (request.Company != null)
-                profile.Company = request.Company;
-
-            if (request.CompanyIndustry != null)
-                profile.CompanyIndustry = request.CompanyIndustry;
-
-            if (request.City != null)
-                profile.City = request.City;
-
-            if (request.Country != null)
-                profile.Country = request.Country;
-
-            if (request.LinkedinUrl != null)
-                profile.LinkedinUrl = request.LinkedinUrl;
-
-            if (request.FacebookUrl != null)
-                profile.FacebookUrl = request.FacebookUrl;
-
-            if (request.Bio != null)
-                profile.Bio = request.Bio;
-
+            // SỬA LỖI Ở ĐÂY: Thêm .Value
             if (request.IsPublic.HasValue)
                 profile.IsPublic = request.IsPublic.Value;
 
             profile.UpdatedAt = DateTimeOffset.UtcNow;
-
             await _context.SaveChangesAsync();
 
             var response = MapToDetailResponse(profile);
@@ -182,18 +161,15 @@ namespace QLCSV.Controllers
         public async Task<IActionResult> UpdateMyPrivacy(
             [FromBody] AlumniPrivacyUpdateRequest request)
         {
-
             var userId = GetCurrentUserId();
 
             var profile = await _context.AlumniProfiles
-                .FirstOrDefaultAsync(a => a.UserId == userId.Value);
+                .FirstOrDefaultAsync(a => a.UserId == userId);
 
-            if (profile == null)
-                return NotFound(new { Message = "Bạn chưa hoàn thiện hồ sơ" });
+            if (profile == null) return NotFound(new { Message = "Bạn chưa hoàn thiện hồ sơ" });
 
             profile.IsPublic = request.IsPublic;
             profile.UpdatedAt = DateTimeOffset.UtcNow;
-
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Cập nhật quyền hiển thị thành công", profile.IsPublic });
@@ -208,16 +184,12 @@ namespace QLCSV.Controllers
                 FullName = profile.User.FullName,
                 Email = profile.User.Email,
                 AvatarUrl = profile.User.AvatarUrl,
-
                 StudentId = profile.StudentId,
                 GraduationYear = profile.GraduationYear,
-
                 FacultyId = profile.FacultyId,
                 FacultyName = profile.Faculty.Name,
-
                 MajorId = profile.MajorId,
                 MajorName = profile.Major.Name,
-
                 CurrentPosition = profile.CurrentPosition,
                 Company = profile.Company,
                 CompanyIndustry = profile.CompanyIndustry,
@@ -226,7 +198,6 @@ namespace QLCSV.Controllers
                 LinkedinUrl = profile.LinkedinUrl,
                 FacebookUrl = profile.FacebookUrl,
                 Bio = profile.Bio,
-
                 IsPublic = profile.IsPublic,
                 CreatedAt = profile.CreatedAt,
                 UpdatedAt = profile.UpdatedAt

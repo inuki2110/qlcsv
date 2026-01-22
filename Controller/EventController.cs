@@ -35,20 +35,9 @@ namespace QLCSV.Controllers
                 .Include(e => e.CreatedByUser)
                 .AsQueryable();
 
-            if (onlyUpcoming)
-            {
-                query = query.Where(e => e.EventDate >= now);
-            }
-
-            if (from.HasValue)
-            {
-                query = query.Where(e => e.EventDate >= from.Value);
-            }
-
-            if (to.HasValue)
-            {
-                query = query.Where(e => e.EventDate <= to.Value);
-            }
+            if (onlyUpcoming) query = query.Where(e => e.EventDate >= now);
+            if (from.HasValue) query = query.Where(e => e.EventDate >= from.Value);
+            if (to.HasValue) query = query.Where(e => e.EventDate <= to.Value);
 
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -57,7 +46,8 @@ namespace QLCSV.Controllers
                     (e.Description != null && EF.Functions.ILike(e.Description, $"%{keyword}%")));
             }
 
-            var currentUserId = GetCurrentUserId();
+            // SỬA LỖI: Dùng hàm Optional để khách vãng lai không bị lỗi
+            var currentUserId = GetCurrentUserIdOptional();
 
             var totalCount = await query.CountAsync();
             pageSize = Math.Min(pageSize, 100);
@@ -103,7 +93,7 @@ namespace QLCSV.Controllers
         [HttpGet("{id:long}")]
         public async Task<ActionResult<EventResponse>> GetEventById(long id)
         {
-            var currentUserId = GetCurrentUserId();
+            var currentUserId = GetCurrentUserIdOptional(); // SỬA: Dùng Optional
 
             var ev = await _context.Events
                 .Include(e => e.Registrations)
@@ -144,12 +134,9 @@ namespace QLCSV.Controllers
         public async Task<ActionResult<EventResponse>> CreateEvent(
             [FromBody] EventCreateRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var userId = GetCurrentUserId();
-            if (userId == null)
-                return Unauthorized();
+            var userId = GetCurrentUserId(); // SỬA: Dùng hàm chính (bắt buộc login)
 
             var ev = new QLCSV.Models.Event
             {
@@ -161,7 +148,7 @@ namespace QLCSV.Controllers
                 MeetLink = request.MeetLink,
                 ThumbnailUrl = request.ThumbnailUrl,
                 MaxParticipants = request.MaxParticipants,
-                CreatedBy = userId.Value,
+                CreatedBy = userId, // Không cần .Value vì hàm trả về long
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
@@ -197,16 +184,14 @@ namespace QLCSV.Controllers
             long id,
             [FromBody] EventUpdateRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var ev = await _context.Events
                 .Include(e => e.Registrations)
                 .Include(e => e.CreatedByUser)
                 .FirstOrDefaultAsync(e => e.Id == id);
 
-            if (ev == null)
-                return NotFound(new { Message = "Sự kiện không tồn tại" });
+            if (ev == null) return NotFound(new { Message = "Sự kiện không tồn tại" });
 
             ev.Title = request.Title;
             ev.Description = request.Description;
@@ -219,7 +204,7 @@ namespace QLCSV.Controllers
 
             await _context.SaveChangesAsync();
 
-            var currentUserId = GetCurrentUserId();
+            var currentUserId = GetCurrentUserIdOptional();
 
             var response = new EventResponse
             {
@@ -251,16 +236,11 @@ namespace QLCSV.Controllers
         [HttpDelete("{id:long}")]
         public async Task<IActionResult> DeleteEvent(long id)
         {
-            var ev = await _context.Events
-                .Include(e => e.Registrations)
-                .FirstOrDefaultAsync(e => e.Id == id);
-
-            if (ev == null)
-                return NotFound(new { Message = "Sự kiện không tồn tại" });
+            var ev = await _context.Events.Include(e => e.Registrations).FirstOrDefaultAsync(e => e.Id == id);
+            if (ev == null) return NotFound(new { Message = "Sự kiện không tồn tại" });
 
             _context.Events.Remove(ev);
             await _context.SaveChangesAsync();
-
             return Ok(new { Message = "Xóa sự kiện thành công" });
         }
 
@@ -268,16 +248,12 @@ namespace QLCSV.Controllers
         [HttpPost("{id:long}/register")]
         public async Task<IActionResult> RegisterEvent(long id)
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
-                return Unauthorized();
+            var userId = GetCurrentUserId(); // Bắt buộc login
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var ev = await _context.Events
-                    .Include(e => e.Registrations)
-                    .FirstOrDefaultAsync(e => e.Id == id);
+                var ev = await _context.Events.Include(e => e.Registrations).FirstOrDefaultAsync(e => e.Id == id);
 
                 if (ev == null)
                 {
@@ -292,7 +268,7 @@ namespace QLCSV.Controllers
                 }
 
                 var existing = await _context.EventRegistrations
-                    .FirstOrDefaultAsync(r => r.EventId == id && r.UserId == userId.Value);
+                    .FirstOrDefaultAsync(r => r.EventId == id && r.UserId == userId);
 
                 if (existing != null && existing.Status == "registered")
                 {
@@ -317,7 +293,7 @@ namespace QLCSV.Controllers
                     existing = new QLCSV.Models.EventRegistration
                     {
                         EventId = id,
-                        UserId = userId.Value,
+                        UserId = userId,
                         RegisteredAt = DateTimeOffset.UtcNow,
                         Status = "registered"
                     };
@@ -345,12 +321,10 @@ namespace QLCSV.Controllers
         [HttpPost("{id:long}/cancel")]
         public async Task<IActionResult> CancelRegistration(long id)
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
-                return Unauthorized();
+            var userId = GetCurrentUserId(); // Bắt buộc login
 
             var registration = await _context.EventRegistrations
-                .FirstOrDefaultAsync(r => r.EventId == id && r.UserId == userId.Value);
+                .FirstOrDefaultAsync(r => r.EventId == id && r.UserId == userId);
 
             if (registration == null || registration.Status != "registered")
                 return BadRequest(new { Message = "Bạn chưa đăng ký sự kiện này hoặc đã hủy trước đó" });
@@ -365,13 +339,11 @@ namespace QLCSV.Controllers
         [HttpGet("my-registrations")]
         public async Task<ActionResult<IEnumerable<MyEventRegistrationResponse>>> GetMyRegistrations()
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
-                return Unauthorized();
+            var userId = GetCurrentUserId(); // Bắt buộc login
 
             var regs = await _context.EventRegistrations
                 .Include(r => r.Event)
-                .Where(r => r.UserId == userId.Value)
+                .Where(r => r.UserId == userId)
                 .OrderByDescending(r => r.RegisteredAt)
                 .Select(r => new MyEventRegistrationResponse
                 {
@@ -397,8 +369,7 @@ namespace QLCSV.Controllers
             [FromQuery] int pageSize = 50)
         {
             var exists = await _context.Events.AnyAsync(e => e.Id == id);
-            if (!exists)
-                return NotFound(new { Message = "Sự kiện không tồn tại" });
+            if (!exists) return NotFound(new { Message = "Sự kiện không tồn tại" });
 
             var query = _context.EventRegistrations
                 .Include(r => r.User)
