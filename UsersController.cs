@@ -1,0 +1,150 @@
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using QLCSV.Data;
+using QLCSV.DTOs.User;
+
+namespace QLCSV.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class UsersController : BaseController
+    {
+        private readonly AppDbContext _context;
+
+        public UsersController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<UserResponse>>> GetUsers(
+            [FromQuery] string? role,
+            [FromQuery] bool? isActive,
+            [FromQuery] string? search)
+        {
+            var query = _context.Users
+                .Include(u => u.AlumniProfile)
+                    .ThenInclude(p => p.Faculty)
+                .Include(u => u.AlumniProfile)
+                    .ThenInclude(p => p.Major)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                query = query.Where(u => u.Role == role);
+            }
+
+            if (isActive.HasValue)
+            {
+                query = query.Where(u => u.IsActive == isActive.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(u =>
+                    EF.Functions.ILike(u.FullName, $"%{search}%") ||
+                    EF.Functions.ILike(u.Email, $"%{search}%"));
+            }
+
+            var users = await query
+                .OrderByDescending(u => u.CreatedAt)
+                .ToListAsync();
+
+            var userResponses = users.Select(u => new UserResponse
+            {
+                Id = u.Id,
+                Email = u.Email,
+                FullName = u.FullName,
+                AvatarUrl = u.AvatarUrl,
+                Role = u.Role,
+                IsActive = u.IsActive,
+                CreatedAt = u.CreatedAt,
+                UpdatedAt = u.UpdatedAt,
+
+                HasProfile = u.AlumniProfile != null,
+                StudentId = u.AlumniProfile?.StudentId,
+                GraduationYear = u.AlumniProfile?.GraduationYear,
+
+                FacultyId = u.AlumniProfile?.FacultyId,
+                FacultyName = u.AlumniProfile?.Faculty?.Name,
+
+                MajorId = u.AlumniProfile?.MajorId,
+                MajorName = u.AlumniProfile?.Major?.Name
+            }).ToList();
+
+            return Ok(userResponses);
+        }
+
+        [HttpGet("{id:long}")]
+        public async Task<ActionResult<UserResponse>> GetUserById(long id)
+        {
+            var user = await _context.Users
+                .Include(u => u.AlumniProfile)
+                    .ThenInclude(p => p.Faculty)
+                .Include(u => u.AlumniProfile)
+                    .ThenInclude(p => p.Major)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (user == null)
+                return NotFound(new { Message = "User không tồn tại" });
+
+            var response = new UserResponse
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FullName = user.FullName,
+                AvatarUrl = user.AvatarUrl,
+                Role = user.Role,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt,
+
+                HasProfile = user.AlumniProfile != null,
+                StudentId = user.AlumniProfile?.StudentId,
+                GraduationYear = user.AlumniProfile?.GraduationYear,
+
+                FacultyId = user.AlumniProfile?.FacultyId,
+                FacultyName = user.AlumniProfile?.Faculty?.Name ?? null,
+
+                MajorId = user.AlumniProfile?.MajorId,
+                MajorName = user.AlumniProfile?.Major?.Name ?? null
+            };
+
+            return Ok(response);
+        }
+
+        [HttpPut("{id:long}/role")]
+        public async Task<IActionResult> UpdateUserRole(
+            long id,
+            [FromBody] UserUpdateRoleRequest request)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound(new { Message = "User không tồn tại" });
+
+            user.Role = request.Role;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Cập nhật vai trò thành công", user.Id, user.Role });
+        }
+
+        [HttpPut("{id:long}/status")]
+        public async Task<IActionResult> UpdateUserStatus(
+            long id,
+            [FromBody] UserUpdateStatusRequest request)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound(new { Message = "User không tồn tại" });
+
+            user.IsActive = request.IsActive;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Cập nhật trạng thái thành công", user.Id, user.IsActive });
+        }
+
+    }
