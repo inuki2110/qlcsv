@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using QLCSV.Validation;
 
 namespace QLCSV.DTOs.Alumni
 {
