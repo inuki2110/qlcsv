@@ -24,9 +24,9 @@ namespace QLCSV.Controllers
         {
             var query = _context.Users
                 .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p!.Faculty) // Đã thêm dấu ! để sửa Warning
+                    .ThenInclude(p => p!.Faculty)
                 .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p!.Major)   // Đã thêm dấu ! để sửa Warning
+                    .ThenInclude(p => p!.Major)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(role))
@@ -66,10 +66,10 @@ namespace QLCSV.Controllers
                 GraduationYear = u.AlumniProfile?.GraduationYear,
 
                 FacultyId = u.AlumniProfile?.FacultyId,
-                FacultyName = u.AlumniProfile?.Faculty?.Name, // Dùng ?. để tránh lỗi null
+                FacultyName = u.AlumniProfile?.Faculty?.Name,
 
                 MajorId = u.AlumniProfile?.MajorId,
-                MajorName = u.AlumniProfile?.Major?.Name // Dùng ?. để tránh lỗi null
+                MajorName = u.AlumniProfile?.Major?.Name
             }).ToList();
 
             return Ok(userResponses);
@@ -80,9 +80,9 @@ namespace QLCSV.Controllers
         {
             var user = await _context.Users
                 .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p!.Faculty) // Sửa Warning
+                    .ThenInclude(p => p!.Faculty)
                 .Include(u => u.AlumniProfile)
-                    .ThenInclude(p => p!.Major)   // Sửa Warning
+                    .ThenInclude(p => p!.Major)
                 .FirstOrDefaultAsync(u => u.Id == id);
 
             if (user == null)
@@ -123,7 +123,9 @@ namespace QLCSV.Controllers
                 return NotFound(new { Message = "User không tồn tại" });
 
             user.Role = request.Role;
-            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            // ĐÃ SỬA: DateTimeOffset.UtcNow -> DateTime.UtcNow
+            user.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
@@ -140,12 +142,13 @@ namespace QLCSV.Controllers
                 return NotFound(new { Message = "User không tồn tại" });
 
             user.IsActive = request.IsActive;
-            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            // ĐÃ SỬA: DateTimeOffset.UtcNow -> DateTime.UtcNow
+            user.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Cập nhật trạng thái thành công", user.Id, user.IsActive });
         }
-
     }
 }

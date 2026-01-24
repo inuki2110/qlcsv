@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLCSV.Data;
 using QLCSV.DTOs.Faculty;
@@ -8,148 +7,73 @@ using QLCSV.Models;
 namespace QLCSV.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class FacultiesController : ControllerBase
+    [Route("api/faculties")]
+    public class FacultyController : ControllerBase
     {
         private readonly AppDbContext _context;
 
-        public FacultiesController(AppDbContext context)
+        public FacultyController(AppDbContext context)
         {
             _context = context;
         }
 
+        // GET: api/faculties
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<FacultyResponse>>> GetFaculties()
+        public async Task<ActionResult<List<FacultyResponse>>> GetAll()
         {
-            var faculties = await _context.Faculties
-                .Include(f => f.Majors)
+            var data = await _context.Faculties
                 .Select(f => new FacultyResponse
                 {
                     Id = f.Id,
                     Name = f.Name,
-                    ShortName = f.ShortName,
-                    Description = f.Description,
-                    MajorCount = f.Majors.Count
+                    ShortName = f.ShortName
                 })
                 .ToListAsync();
 
-            return Ok(faculties);
+            return Ok(data);
         }
 
-        [HttpGet("{id:int}")]
-        public async Task<ActionResult<FacultyResponse>> GetFaculty(int id)
-        {
-            var faculty = await _context.Faculties
-                .Include(f => f.Majors)
-                .Select(f => new FacultyResponse
-                {
-                    Id = f.Id,
-                    Name = f.Name,
-                    ShortName = f.ShortName,
-                    Description = f.Description,
-                    MajorCount = f.Majors.Count
-                })
-                .FirstOrDefaultAsync(f => f.Id == id);
-
-            if (faculty == null)
-                return NotFound(new { Message = "Khoa không tồn tại" });
-
-            return Ok(faculty);
-        }
-
-        [Authorize(Roles = "admin")]
+        // POST: api/faculties
         [HttpPost]
-        public async Task<ActionResult<FacultyResponse>> CreateFaculty([FromBody] FacultyCreateRequest request)
+        public async Task<IActionResult> Create(FacultyCreateRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var existed = await _context.Faculties
-                .AnyAsync(f => f.Name == request.Name);
-
-            if (existed)
-                return Conflict(new { Message = "Tên khoa đã tồn tại" });
-
             var faculty = new Faculty
             {
                 Name = request.Name,
-                ShortName = request.ShortName,
-                Description = request.Description
+                ShortName = request.ShortName
             };
 
             _context.Faculties.Add(faculty);
             await _context.SaveChangesAsync();
 
-            var response = new FacultyResponse
-            {
-                Id = faculty.Id,
-                Name = faculty.Name,
-                ShortName = faculty.ShortName,
-                Description = faculty.Description,
-                MajorCount = 0
-            };
-
-            return CreatedAtAction(nameof(GetFaculty), new { id = faculty.Id }, response);
+            return Ok();
         }
 
-        [Authorize(Roles = "admin")]
-        [HttpPut("{id:int}")]
-        public async Task<ActionResult<FacultyResponse>> UpdateFaculty(
-            int id,
-            [FromBody] FacultyUpdateRequest request)
+        // PUT: api/faculties/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, FacultyUpdateRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var faculty = await _context.Faculties
-                .Include(f => f.Majors)
-                .FirstOrDefaultAsync(f => f.Id == id);
-
-            if (faculty == null)
-                return NotFound(new { Message = "Khoa không tồn tại" });
-
-            var nameExisted = await _context.Faculties
-                .AnyAsync(f => f.Id != id && f.Name == request.Name);
-
-            if (nameExisted)
-                return Conflict(new { Message = "Tên khoa đã tồn tại" });
+            var faculty = await _context.Faculties.FindAsync(id);
+            if (faculty == null) return NotFound();
 
             faculty.Name = request.Name;
             faculty.ShortName = request.ShortName;
-            faculty.Description = request.Description;
 
             await _context.SaveChangesAsync();
-
-            var response = new FacultyResponse
-            {
-                Id = faculty.Id,
-                Name = faculty.Name,
-                ShortName = faculty.ShortName,
-                Description = faculty.Description,
-                MajorCount = faculty.Majors.Count
-            };
-
-            return Ok(response);
+            return Ok();
         }
 
-        [Authorize(Roles = "admin")]
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> DeleteFaculty(int id)
+        // DELETE: api/faculties/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
         {
-            var faculty = await _context.Faculties
-                .Include(f => f.Majors)
-                .FirstOrDefaultAsync(f => f.Id == id);
-
-            if (faculty == null)
-                return NotFound(new { Message = "Khoa không tồn tại" });
-
-            if (faculty.Majors.Any())
-                return BadRequest(new { Message = "Không thể xóa khoa đang có ngành" });
+            var faculty = await _context.Faculties.FindAsync(id);
+            if (faculty == null) return NotFound();
 
             _context.Faculties.Remove(faculty);
             await _context.SaveChangesAsync();
 
-            return Ok(new { Message = "Xóa khoa thành công" });
+            return Ok();
         }
     }
 }
